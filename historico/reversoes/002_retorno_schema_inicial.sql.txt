@@ -1,0 +1,48 @@
+-- Retira apenas os complementos adicionados por 002_status_ocorrencias_e_vinculos.
+-- Preserva as nove tabelas originais e as permissoes de operacao da API.
+-- Nao usar CASCADE: dependencias inesperadas devem interromper a reversao.
+-- A reversao automatica exige ocorrencias vazias para nao apagar estados
+-- operacionais cadastrados depois da instalacao inicial.
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+SELECT pg_advisory_xact_lock(187452019, 1);
+
+DO $$
+BEGIN
+  IF current_database() <> 'sastly' THEN
+    RAISE EXCEPTION 'Conecte ao banco sastly antes de executar a reversao';
+  END IF;
+END;
+$$;
+
+LOCK TABLE public.ocorrencias IN ACCESS EXCLUSIVE MODE;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.ocorrencias) THEN
+    RAISE EXCEPTION 'Existem ocorrencias: revisar os dados de status antes de remover a coluna';
+  END IF;
+END;
+$$;
+
+DROP VIEW IF EXISTS public.vw_colaboradores_resumo_obras;
+
+DROP INDEX IF EXISTS public.idx_usuarios_empresa;
+DROP INDEX IF EXISTS public.idx_tokens_recuperacao_usuario;
+DROP INDEX IF EXISTS public.idx_tokens_recuperacao_expiracao;
+DROP INDEX IF EXISTS public.idx_obras_empresa;
+DROP INDEX IF EXISTS public.idx_obras_responsavel_tecnico;
+DROP INDEX IF EXISTS public.idx_obras_responsavel_sst;
+DROP INDEX IF EXISTS public.idx_obra_contratadas_empresa;
+DROP INDEX IF EXISTS public.idx_colaboradores_empresa;
+DROP INDEX IF EXISTS public.idx_colaborador_obras_obra;
+DROP INDEX IF EXISTS public.idx_desvios_colaborador_data;
+DROP INDEX IF EXISTS public.idx_desvios_obra;
+DROP INDEX IF EXISTS public.idx_desvios_autor;
+DROP INDEX IF EXISTS public.idx_ocorrencias_autor;
+DROP INDEX IF EXISTS public.idx_ocorrencias_status_data;
+
+ALTER TABLE public.ocorrencias DROP CONSTRAINT IF EXISTS ck_ocorrencias_status;
+ALTER TABLE public.ocorrencias DROP COLUMN IF EXISTS status;
+
+COMMIT;

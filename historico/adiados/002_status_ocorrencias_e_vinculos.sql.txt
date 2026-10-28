@@ -1,0 +1,58 @@
+-- ADIADO: nao faz parte da instalacao atual do prototipo.
+-- Aplicado e depois revertido a pedido do usuario em 2026-10-08.
+-- Preservado apenas como referencia recuperavel para evolucao futura.
+-- Complementos aditivos: nenhum campo novo precisa ser enviado pela API.
+-- Pre-requisito: 001_schema_base.sql. PostgreSQL 18.
+-- Nao habilita RLS nem altera os significados de empresa_id.
+
+BEGIN;
+
+ALTER TABLE public.ocorrencias
+  ADD COLUMN status VARCHAR(1) NOT NULL DEFAULT 'A',
+  ADD CONSTRAINT ck_ocorrencias_status CHECK (status IN ('A', 'P', 'F'));
+
+COMMENT ON COLUMN public.ocorrencias.status IS
+  'A = Aberta; P = Em andamento; F = Finalizada. Transicoes, encerramento e permissoes ainda dependem de implementacao na API.';
+
+-- Mantem colaborador obrigatorio nos desvios. Nao permite duplicar o mesmo
+-- par colaborador/obra (PK original), mas permite obras diferentes.
+-- Nao cria bloqueio novo para colaborador inativo: a API atual nao trata
+-- essa rejeicao. A consulta abaixo fornece os dados para a futura validacao.
+CREATE VIEW public.vw_colaboradores_resumo_obras
+WITH (security_invoker = true) AS
+SELECT
+  c.id AS colaborador_id,
+  c.empresa_id,
+  c.status AS status_colaborador,
+  c.status = 'Ativo' AS colaborador_ativo,
+  count(co.obra_id)::integer AS quantidade_obras_vinculadas,
+  count(co.obra_id) FILTER (WHERE o.status = 'Ativa')::integer
+    AS quantidade_obras_ativas,
+  count(co.obra_id) > 1 AS vinculado_a_multiplas_obras,
+  count(co.obra_id) FILTER (WHERE o.status = 'Ativa') > 1
+    AS vinculado_a_multiplas_obras_ativas
+FROM public.colaboradores c
+LEFT JOIN public.colaborador_obras co ON co.colaborador_id = c.id
+LEFT JOIN public.obras o ON o.id = co.obra_id
+GROUP BY c.id, c.empresa_id, c.status;
+
+COMMENT ON VIEW public.vw_colaboradores_resumo_obras IS
+  'Diagnostico de atividade e vinculos, sem bloquear multiplas obras. Nao constitui controle de autorizacao ou isolamento por organizacao.';
+
+-- Indices nas referencias e nos filtros ja usados pela API.
+CREATE INDEX idx_usuarios_empresa ON public.usuarios (empresa_id);
+CREATE INDEX idx_tokens_recuperacao_usuario ON public.tokens_recuperacao_senha (usuario_id);
+CREATE INDEX idx_tokens_recuperacao_expiracao ON public.tokens_recuperacao_senha (expira_em);
+CREATE INDEX idx_obras_empresa ON public.obras (empresa_id);
+CREATE INDEX idx_obras_responsavel_tecnico ON public.obras (responsavel_tecnico_id);
+CREATE INDEX idx_obras_responsavel_sst ON public.obras (responsavel_sst_id);
+CREATE INDEX idx_obra_contratadas_empresa ON public.obra_empresas_contratadas (empresa_id, obra_id);
+CREATE INDEX idx_colaboradores_empresa ON public.colaboradores (empresa_id);
+CREATE INDEX idx_colaborador_obras_obra ON public.colaborador_obras (obra_id, colaborador_id);
+CREATE INDEX idx_desvios_colaborador_data ON public.desvios (colaborador_envolvido_id, data_hora_ocorrencia DESC);
+CREATE INDEX idx_desvios_obra ON public.desvios (obra_id);
+CREATE INDEX idx_desvios_autor ON public.desvios (registrado_por_usuario_id);
+CREATE INDEX idx_ocorrencias_autor ON public.ocorrencias (registrado_por_usuario_id);
+CREATE INDEX idx_ocorrencias_status_data ON public.ocorrencias (status, data_hora_evento DESC);
+
+COMMIT;

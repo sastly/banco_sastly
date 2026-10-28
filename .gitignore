@@ -1,0 +1,30 @@
+# Credenciais e configuracao privada
+.env
+.env.*
+.local/
+pgpass.conf
+.pgpass
+*.pem
+*.key
+*.pfx
+*.p12
+acesso-prototipo.json
+
+# Backups/dados exportados: este repositorio e de codigo
+backups/
+dumps/
+*.dump
+*.backup
+*.bak
+*.csv
+*.sql.gz
+*.sql.zip
+
+# Saidas locais
+*.log
+logs/
+tmp/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
